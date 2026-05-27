@@ -1,10 +1,21 @@
-# ALMC SHIELD agent
+<p align="center">
+  <img src="docs/assets/logo.png" alt="ALMC SHIELD — Abuse Shield, Web & Defense Infrastructure" width="320">
+</p>
 
-> Open-source fail2ban → cloud aggregator. Block the attacker once, protect every server in your fleet.
+<h1 align="center">ALMC SHIELD agent</h1>
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)]()
-[![Status](https://img.shields.io/badge/status-production-green.svg)]()
+<p align="center">
+  <strong>Open-source fail2ban → cloud aggregator.</strong><br>
+  Block the attacker once, protect every server in your fleet.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue.svg" alt="Python">
+  <img src="https://img.shields.io/badge/status-production-green.svg" alt="Status">
+  <a href="https://almc.es/shield"><img src="https://img.shields.io/badge/marketing-almc.es%2Fshield-0099cc.svg" alt="Marketing"></a>
+</p>
+
 
 ALMC SHIELD is the lightweight Linux agent that powers the [Abuse Shield service](https://almc.es/shield). It reads your local `fail2ban.log`, ships each ban event to a multi-tenant central API, and pulls back the de-duplicated, enrichment-validated blocklist so every server in your fleet bans the same attacker — within seconds.
 
