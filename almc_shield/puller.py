@@ -18,7 +18,9 @@ class Puller(threading.Thread):
         self.client = http_client
         self.f2b = f2b
         self._stop = threading.Event()
-        # Tier from heartbeat response (placeholder True for now; F11 will gate it via tenant settings)
+        # Whether to include the global cross-tenant feed in the pull.
+        # Default True; the backend may flip this off per-tenant via heartbeat
+        # response in future releases (currently always-on).
         self.include_global = True
 
     def stop(self):

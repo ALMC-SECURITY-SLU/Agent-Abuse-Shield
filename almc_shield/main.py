@@ -83,11 +83,11 @@ class Agent:
                 self._stop.wait(timeout=1.0)
         finally:
             log.info("agent_stopping_drain_outbox")
-            # SIGTERM stop order (per F4 spec):
-            # 1. heartbeat first -> send final degraded state to backend
-            # 2. puller -> stop pulling new blocklist deltas
-            # 3. reader -> stop tailing fail2ban.log
-            # 4. final sender flush -> drain outbox
+            # SIGTERM shutdown order (must be in this exact sequence):
+            # 1. heartbeat first  -> send final degraded state to backend
+            # 2. puller           -> stop pulling new blocklist deltas
+            # 3. reader           -> stop tailing fail2ban.log
+            # 4. final sender flush -> drain outbox before exit
             self.heartbeat.degraded = True
             try:
                 self.heartbeat.send_once()

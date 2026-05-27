@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-05-28
+
+### Changed
+- Cleaned up internal development-phase references (F3/F4/F11) from code and
+  config comments. No behaviour change — only clearer, self-contained
+  documentation for public readers.
+
 ## [1.0.1] - 2026-05-28
 
 ### Added
@@ -25,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - uninstall.sh: clean removal preserving fail2ban config.
 - Install telemetry: each step reports to `/api/v1/abuse/install-event` so the customer's dashboard shows live progress.
 
-[Unreleased]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/releases/tag/v1.0.0
