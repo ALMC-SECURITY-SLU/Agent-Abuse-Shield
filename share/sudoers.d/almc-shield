@@ -1,0 +1,7 @@
+# ALMC Abuse Shield agent — limited sudo for fail2ban-client commands
+# F3: not yet used, but installed for F4 forward-compat
+almc-shield ALL=(root) NOPASSWD: /usr/bin/fail2ban-client set almc-blocklist banip *
+almc-shield ALL=(root) NOPASSWD: /usr/bin/fail2ban-client set almc-blocklist unbanip *
+almc-shield ALL=(root) NOPASSWD: /usr/bin/fail2ban-client status almc-blocklist
+almc-shield ALL=(root) NOPASSWD: /usr/bin/fail2ban-client reload almc-blocklist
+Defaults!/usr/bin/fail2ban-client !syslog

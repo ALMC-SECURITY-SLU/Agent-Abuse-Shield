@@ -1,0 +1,43 @@
+[Unit]
+Description=ALMC Abuse Shield Agent (reports fail2ban bans to almc.es)
+After=network-online.target fail2ban.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=almc-shield
+Group=almc-shield
+WorkingDirectory=/opt/almc-shield
+ExecStart=/opt/almc-shield/bin/almc-shield --config /etc/almc-shield/config.ini
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Hardening MÍNIMO — todas las opciones que activan NoNewPrivileges=yes
+# implícitamente (SystemCallFilter, PrivateDevices, RestrictNamespaces,
+# LockPersonality, RestrictAddressFamilies excluyente, ProtectKernel*, etc.)
+# están ELIMINADAS porque rompen sudo → fail2ban-client. systemd no permite
+# tener al mismo tiempo NoNewPrivileges=no + esas restricciones.
+#
+# Aislamiento que SÍ se conserva:
+#   - Usuario sistema dedicado almc-shield (no root)
+#   - Sudoers limitado a exactamente 4 subcomandos de fail2ban-client
+#     (/etc/sudoers.d/almc-shield)
+#   - Filesystem: ProtectSystem=strict + ReadWritePaths solo a /var/lib/almc-shield + /var/log/almc-shield
+#   - ProtectHome=yes (sin acceso a /home, /root)
+#   - PrivateTmp=yes (/tmp aislado)
+#   - Memoria / tareas limitadas (MemoryMax=128M, TasksMax=32)
+ProtectSystem=strict
+ReadWritePaths=/var/lib/almc-shield /var/log/almc-shield
+ProtectHome=yes
+PrivateTmp=yes
+MemoryMax=128M
+TasksMax=32
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

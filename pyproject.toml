@@ -1,0 +1,24 @@
+[project]
+name = "almc-shield"
+version = "1.0.0"
+description = "ALMC Abuse Shield agent — reports fail2ban bans to almc.es"
+authors = [{name = "ALMC Security S.L.U.", email = "info@almc.es"}]
+requires-python = ">=3.8"
+dependencies = [
+    "httpx>=0.28.0,<0.29",
+    "watchdog>=6.0.0,<7",
+    "structlog>=25.0.0,<26",
+]
+readme = "README.md"
+license = {text = "Proprietary"}
+
+[project.scripts]
+almc-shield = "almc_shield.__main__:main"
+almc-shield-cli = "almc_shield.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["almc_shield*"]

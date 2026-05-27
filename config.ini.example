@@ -1,0 +1,55 @@
+# ALMC Abuse Shield agent configuration.
+# Copy to /etc/almc-shield/config.ini and replace API_KEY.
+
+[api]
+url = https://almc.es/api/v1/abuse
+api_key = ${API_KEY}
+# ca_bundle = /opt/almc-shield/share/ca-bundle.pem
+# cert_pin_sha256 =
+# fallback_ip =
+
+[outbox]
+db_path = /var/lib/almc-shield/outbox.db
+max_size_mb = 100
+max_age_days = 7
+batch_size_max = 500
+batch_size_bytes_max = 262144
+
+[sender]
+flush_interval_seconds = 30
+on_demand_threshold = 50
+timeout_connect = 10
+timeout_read = 20
+backoff_min = 1
+backoff_max = 60
+backoff_jitter = true
+circuit_breaker_failures_to_open = 10
+circuit_breaker_cooldown_seconds = 60
+circuit_breaker_cooldown_cap = 900
+
+[heartbeat]
+interval_seconds = 60
+interval_seconds_degraded = 300
+
+[puller]
+interval_seconds = 300
+include_global = true
+timeout_connect = 10
+timeout_read = 30
+
+[fail2ban]
+log_path = /var/log/fail2ban.log
+jail_name = almc-blocklist
+default_bantime = 604800
+
+[logging]
+level = INFO
+format = json
+file = /var/log/almc-shield/agent.log
+max_size_mb = 50
+backup_count = 7
+
+[runtime]
+mode = auto
+foreground = false
+log_destination = file
