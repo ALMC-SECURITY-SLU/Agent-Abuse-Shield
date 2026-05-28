@@ -50,7 +50,7 @@ class Agent:
         self.puller = Puller(cfg, self.state, self.http_client, self.f2b)
         self.heartbeat = Heartbeat(cfg, self.outbox, self.state, self.sender, self.http_client)
         self.heartbeat._start_time = time.time()
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
 
     def run(self) -> int:
         env = detect_environment()
@@ -67,7 +67,7 @@ class Agent:
 
         last_flush = 0.0
         try:
-            while not self._stop.is_set():
+            while not self._stop_event.is_set():
                 now = time.time()
                 interval = self.cfg.sender.flush_interval_seconds
                 # Adaptive: flush sooner if outbox is large
@@ -80,7 +80,7 @@ class Agent:
                 if int(now) % 60 == 0:
                     self.outbox.drop_oldest_if_over_quota()
                     self.outbox.drop_older_than(self.cfg.outbox.max_age_days * 86400)
-                self._stop.wait(timeout=1.0)
+                self._stop_event.wait(timeout=1.0)
         finally:
             log.info("agent_stopping_drain_outbox")
             # SIGTERM shutdown order (must be in this exact sequence):
@@ -115,7 +115,7 @@ class Agent:
 
     def _on_signal(self, signum, frame) -> None:
         log.info("signal_received", signum=signum)
-        self._stop.set()
+        self._stop_event.set()
 
 
 def main() -> int:

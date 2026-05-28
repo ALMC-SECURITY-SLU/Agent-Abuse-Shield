@@ -17,25 +17,25 @@ class Puller(threading.Thread):
         self.state = state
         self.client = http_client
         self.f2b = f2b
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         # Whether to include the global cross-tenant feed in the pull.
         # Default True; the backend may flip this off per-tenant via heartbeat
         # response in future releases (currently always-on).
         self.include_global = True
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self):
         log.info("puller_starting", interval=self.cfg.puller.interval_seconds)
         # Initial: detect cold boot or fail2ban restart, do full sync if needed
         self._maybe_full_sync()
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             try:
                 self.pull_once()
             except Exception as e:
                 log.warning("puller_error", error=str(e))
-            self._stop.wait(timeout=self.cfg.puller.interval_seconds)
+            self._stop_event.wait(timeout=self.cfg.puller.interval_seconds)
         log.info("puller_stopped")
 
     def _maybe_full_sync(self):

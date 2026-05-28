@@ -6,6 +6,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-05-28
+
+### Added — installer (12 mejoras)
+- **Panel detection**: auto-detecta Plesk, cPanel, DirectAdmin, aaPanel, ISPConfig
+  y emite warn + telemetría con nota de coexistencia específica por panel.
+- **fail2ban `logtarget` check**: fatal si está en `SYSTEMD-JOURNAL` o `SYSLOG`
+  (el agente lee archivo, no journal). Antes el agente arrancaba OK pero zero
+  reports forever — fallo silencioso devastador.
+- **SELinux auto-configure**: si Enforcing → `semanage fcontext var_log_t` +
+  `restorecon` + `setsebool daemons_use_tty`. Skip con `--skip-selinux`.
+- **`/etc/os-release` PRETTY_NAME**: ahora aparece en banner + telemetría
+  install-event (antes solo `uname -s -r` genérico). El panel del cliente
+  muestra "Ubuntu 24.04 LTS" en vez de "Linux 6.8.0".
+- **fail2ban version min check**: warn no-fatal si <0.10.
+- **`--dry-run`**: ejecuta TODAS las checks sin modificar nada. Ideal para
+  auditoría pre-compra en compliance.
+- **Health check E2E post-install**: verifica systemctl active + log producido
+  + POST `/heartbeat` responde 200. Detecta install OK pero servicio roto.
+- **Verificación SHA-256 del tarball**: descarga sidecar
+  `abuse-shield-agent-X.Y.Z.tar.gz.sha256`, valida con `sha256sum -c`. Fatal
+  si mismatch; no bloqueante si el sidecar no existe.
+- **`--tarball=PATH`**: usa tarball local (airgapped / hospitales / banca).
+- **`--auto-update`**: instala systemd timer semanal (`Sun 03:00 ± 2h`) que
+  checkea GitHub `/releases/latest` y se auto-reinstala con `--reinstall`.
+- **Soporte SUSE / openSUSE** (zypper) además de apt/dnf/yum/apk.
+- **`--reinstall`**: descarga + ejecuta `uninstall.sh`, luego reinstala. One-shot
+  upgrade desde el campo.
+
+### Added — installer (extra)
+- **Auto-detección LXC** con `systemd-detect-virt` + fallback `/proc/1/cgroup`.
+  Si LXC sin privilegios: comenta `ProtectSystem` / `ProtectHome` / `PrivateTmp` /
+  `ReadWritePaths` del systemd unit (mount namespacing requiere `CAP_SYS_ADMIN`
+  que no hay en LXC unprivileged → exit code 226/NAMESPACE). Sin esto el
+  agente NUNCA arrancaba en containers LXC.
+
+### Fixed — agent (críticos)
+- **Reader cold-boot OOM**: `_load_offset()` ahora arranca en EOF del log si
+  no hay state file previo (cold boot en host nuevo). En hosts con
+  `/var/log/fail2ban.log` >100MB acumulados, el peak RSS pasaba de ~900MB →
+  OOM kill del agente. Con tail-mode el peak es ~50MB en estado estable.
+- **`_stop` attribute collision**: `heartbeat.py`, `puller.py` y `main.py`
+  sobreescribían `self._stop = threading.Event()`, ocultando el método
+  `_stop()` heredado de `threading.Thread`. Eso rompía `.join()` con
+  `TypeError: 'Event' object is not callable` en shutdown. Renombrado a
+  `self._stop_event` en los 3 archivos.
+
+### Changed — systemd unit
+- `MemoryMax` 128M → 768M (cubre peak inicial sin OOM; estable ~30M).
+- `StartLimitBurst` / `StartLimitIntervalSec` movidos a `[Unit]`
+  (deprecated en `[Service]` desde systemd 230 — generaba warning).
+
+### Changed — uninstall.sh
+- Para los timer `almc-shield-update.{service,timer}` si existen
+  (antes los dejaba huérfanos tras un install con `--auto-update`).
+- Hace `fail2ban-client unban --all` antes de borrar el jail.
+- `fail2ban-client reload` tras borrar `.conf` para que el jail desaparezca
+  de memoria de fail2ban.
+
 ## [1.0.2] - 2026-05-28
 
 ### Changed
@@ -32,7 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - uninstall.sh: clean removal preserving fail2ban config.
 - Install telemetry: each step reports to `/api/v1/abuse/install-event` so the customer's dashboard shows live progress.
 
-[Unreleased]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/releases/tag/v1.0.0

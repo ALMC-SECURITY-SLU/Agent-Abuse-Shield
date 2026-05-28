@@ -20,16 +20,16 @@ class Heartbeat(threading.Thread):
         self.state = state
         self.sender = sender
         self.client = http_client
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self.degraded = False
         self.hostname = socket.gethostname()
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self):
         log.info("heartbeat_starting")
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             try:
                 self.send_once()
             except Exception as e:
@@ -37,7 +37,7 @@ class Heartbeat(threading.Thread):
                 self.degraded = True
             interval = (self.cfg.heartbeat.interval_seconds_degraded if self.degraded
                         else self.cfg.heartbeat.interval_seconds)
-            self._stop.wait(timeout=interval)
+            self._stop_event.wait(timeout=interval)
         log.info("heartbeat_stopped")
 
     def send_once(self):

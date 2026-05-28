@@ -1,7 +1,10 @@
 [Unit]
 Description=ALMC Abuse Shield Agent (reports fail2ban bans to almc.es)
+Documentation=https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield
 After=network-online.target fail2ban.service
 Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -12,8 +15,6 @@ ExecStart=/opt/almc-shield/bin/almc-shield --config /etc/almc-shield/config.ini
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=10
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 # Hardening MÍNIMO — todas las opciones que activan NoNewPrivileges=yes
 # implícitamente (SystemCallFilter, PrivateDevices, RestrictNamespaces,
@@ -21,19 +22,32 @@ StartLimitIntervalSec=60
 # están ELIMINADAS porque rompen sudo → fail2ban-client. systemd no permite
 # tener al mismo tiempo NoNewPrivileges=no + esas restricciones.
 #
-# Aislamiento que SÍ se conserva:
+# Aislamiento que SÍ se conserva (en hosts NO-LXC):
 #   - Usuario sistema dedicado almc-shield (no root)
 #   - Sudoers limitado a exactamente 4 subcomandos de fail2ban-client
 #     (/etc/sudoers.d/almc-shield)
-#   - Filesystem: ProtectSystem=strict + ReadWritePaths solo a /var/lib/almc-shield + /var/log/almc-shield
+#   - Filesystem: ProtectSystem=strict + ReadWritePaths a /var/lib/almc-shield + /var/log/almc-shield
 #   - ProtectHome=yes (sin acceso a /home, /root)
 #   - PrivateTmp=yes (/tmp aislado)
 #   - Memoria / tareas limitadas (MemoryMax=128M, TasksMax=32)
+#
+# ⚠ LXC sin privilegios: el installer (install.sh) DETECTA LXC con
+# systemd-detect-virt y, si es LXC, COMENTA las 3 líneas de namespacing
+# (ProtectSystem, ProtectHome, PrivateTmp). Razón: LXC sin CAP_SYS_ADMIN
+# bloquea mount namespacing → "Failed at step NAMESPACE" status 226.
+# En LXC el filesystem aislamiento queda en manos del propio container.
 ProtectSystem=strict
 ReadWritePaths=/var/lib/almc-shield /var/log/almc-shield
 ProtectHome=yes
 PrivateTmp=yes
-MemoryMax=128M
+# MemoryMax 768M: el reader del agente puede leer el log entero de fail2ban
+# al iniciar (si offset=0). En hosts con fail2ban activo desde hace meses,
+# /var/log/fail2ban.log puede ser >100MB y el peak inicial supera 800MB
+# RSS porque Python carga muchas líneas en memoria + httpx + watchdog buffers.
+# En régimen estable baja a ~80-120MB. 768M cubre el peak con margen.
+# TODO mejorar reader.py para que arranque en tail-mode (offset=EOF) salvo
+# que haya state previo; bajaría el peak a ~200MB.
+MemoryMax=768M
 TasksMax=32
 
 StandardOutput=journal

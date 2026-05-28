@@ -104,13 +104,29 @@ class Reader(threading.Thread):
             self._save_offset()
 
     def _load_offset(self) -> int:
+        """Carga el offset persistido del último read.
+
+        Si NO hay state file previo (cold boot en host nuevo), arranca en EOF
+        del log para evitar leer y enviar bans históricos ya procesados por
+        fail2ban (que sería 100-500MB de log en hosts maduros → OOM peak).
+        Solo nos importan los bans NUEVOS desde que arrancamos.
+
+        En reinicio del agente, el state file existe → no cold boot.
+        En rotación del log, se detecta por size < offset → reset a 0.
+        """
         try:
             p = Path(self.state_offset_file)
             if p.exists():
                 return int(p.read_text().strip())
         except (OSError, ValueError):
             pass
-        return 0
+        # Cold boot: arrancar en EOF para no procesar log histórico
+        try:
+            eof = os.path.getsize(self.log_path)
+            log.info("reader_cold_boot_seek_eof", offset=eof, log_path=self.log_path)
+            return eof
+        except OSError:
+            return 0
 
     def _save_offset(self) -> None:
         try:
