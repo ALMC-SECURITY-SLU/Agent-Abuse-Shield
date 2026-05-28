@@ -6,6 +6,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-05-28
+
+### Added — installer hardening (6 detecciones extra)
+- **Disk space check** pre-flight: requiere ≥200MB libres en `/opt` y `/var`
+  antes de tocar nada. Fatal con mensaje claro si insuficiente.
+- **DNS + proxy + TLS handshake check** pre-flight: verifica resolución DNS
+  de `almc.es`, detecta `HTTP_PROXY`/`HTTPS_PROXY` en env vars y
+  `/etc/environment`, prueba TLS handshake real (no solo TCP).
+- **Docker/Podman/OpenVZ/nspawn detection**: extiende el LXC namespacing-
+  disable a más container types. Sin esto el agente NUNCA arrancaba en
+  containers Docker no-privileged.
+- **EPEL auto-install antes de fail2ban en RHEL**: `rpm -q epel-release` +
+  `dnf install epel-release` automático (fail2ban vive en EPEL, no en
+  core repos de RHEL/Rocky/Alma).
+- **`policycoreutils-python-utils` auto en RHEL + SELinux**: si SELinux
+  Enforcing pero faltan `semanage`/`restorecon`, los instala primero. En
+  RHEL minimal cloud images no vienen por default.
+- **Sudoers `includedir` verify**: comprueba que `/etc/sudoers` carga
+  `/etc/sudoers.d/`. Si no, warn + nota para añadir
+  `@includedir /etc/sudoers.d` manualmente.
+
+### Added — operational
+- **Trap EXIT con cleanup parcial**: si el install se aborta a mitad
+  (Ctrl+C, error inesperado), detiene el servicio si arrancó y reporta
+  `install_exit_X` al backend (no borra archivos para que el admin
+  pueda inspeccionar antes de `--reinstall`).
+
+### Fixed
+- `grep ... /etc/environment | head -1 | cut ...` sin `|| true` mataba el
+  script con `set -euo pipefail` si el grep no matcheaba (caso típico:
+  server sin proxy configurado → grep exit 1 → pipefail propaga → trap
+  capturaba como abort falso).
+
 ## [1.0.3] - 2026-05-28
 
 ### Added — installer (12 mejoras)
@@ -90,7 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - uninstall.sh: clean removal preserving fail2ban config.
 - Install telemetry: each step reports to `/api/v1/abuse/install-event` so the customer's dashboard shows live progress.
 
-[Unreleased]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/ALMC-SECURITY-SLU/Agent-Abuse-Shield/compare/v1.0.0...v1.0.1

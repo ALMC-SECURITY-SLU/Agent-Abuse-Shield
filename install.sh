@@ -1,5 +1,5 @@
 #!/bin/bash
-# install.sh — Install ALMC Abuse Shield agent (v1.0.3).
+# install.sh — Install ALMC Abuse Shield agent (v1.0.4).
 #
 # Usage (running as root, e.g. inside an LXC container or after `su -`):
 #   ./install.sh --api-key=ab_live_XXXXX
@@ -31,6 +31,37 @@
 
 set -euo pipefail
 
+# ── Trap EXIT para limpieza parcial en caso de abort ────────────────────────
+INSTALL_TRAP_TRIGGERED=0
+INSTALL_FINISHED_OK=0
+on_exit_trap() {
+    local rc=$?
+    # Solo si rc != 0 Y NO terminamos OK Y NO es dry-run Y solo una vez
+    if [ "$rc" -ne 0 ] \
+       && [ "$INSTALL_TRAP_TRIGGERED" = "0" ] \
+       && [ "$INSTALL_FINISHED_OK" = "0" ] \
+       && [ "${DRY_RUN:-0}" != "1" ]; then
+        INSTALL_TRAP_TRIGGERED=1
+        echo "" >&2
+        echo "⚠ Instalación abortada (exit code $rc) — limpieza parcial..." >&2
+        # Cleanup light: detener servicio si arrancó, reportar al backend.
+        # NO borramos archivos para que el cliente pueda inspeccionar y
+        # ejecutar --reinstall o uninstall.sh manualmente.
+        systemctl stop almc-shield 2>/dev/null || true
+        # Reportar abort al backend si tenemos key + url
+        if [ -n "${API_KEY:-}" ] && [ -n "${API_URL:-}" ]; then
+            curl -fsS -m 3 -X POST \
+                -H "Authorization: Bearer $API_KEY" \
+                -H "Content-Type: application/json" \
+                "$API_URL/install-event" \
+                --data '{"event":"error","step_name":"'"${CURRENT_STEP:-aborted}"'","message":"Install abortado","error_code":"install_exit_'"$rc"'","hostname":"'"$(hostname 2>/dev/null || echo unknown)"'","agent_version":"'"${AGENT_VERSION:-unknown}"'"}' \
+                >/dev/null 2>&1 || true
+        fi
+        echo "Para reintentar: curl -fsSL https://almc.es/abuse-shield/install.sh | bash -s -- --api-key=...  --reinstall" >&2
+    fi
+}
+trap on_exit_trap EXIT
+
 # ── Configuración fija ───────────────────────────────────────────────────────
 INSTALL_DIR="/opt/almc-shield"
 CONFIG_DIR="/etc/almc-shield"
@@ -39,7 +70,7 @@ LOG_DIR="/var/log/almc-shield"
 USER="almc-shield"
 GROUP="almc-shield"
 SERVICE_NAME="almc-shield"
-AGENT_VERSION="1.0.3"
+AGENT_VERSION="1.0.4"
 AGENT_TARBALL_URL="https://almc.es/abuse-shield-agent-${AGENT_VERSION}.tar.gz"
 AGENT_TARBALL_SHA_URL="https://almc.es/abuse-shield-agent-${AGENT_VERSION}.tar.gz.sha256"
 UNINSTALL_URL="https://almc.es/abuse-shield/uninstall.sh"
@@ -99,7 +130,66 @@ JSON
         >/dev/null 2>&1 || true
 }
 
-# ── Helpers de detección (panel, OS, fail2ban, SELinux) ──────────────────────
+# ── Helpers de detección (panel, OS, fail2ban, SELinux, disco, red) ──────────
+
+# Verifica espacio en disco mínimo (200MB en /opt + 200MB en /var). Falla
+# antes de descargar/escribir nada para evitar dejar el sistema a medias.
+check_disk_space() {
+    local need_mb=200
+    for path in /opt /var; do
+        # df -BM devuelve "200M", awk extrae sólo el número entero
+        local avail
+        avail=$(df -BM "$path" 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
+        if [ -n "$avail" ] && [ "$avail" -lt "$need_mb" ]; then
+            fatal "Espacio insuficiente en $path: ${avail}MB libres (mínimo ${need_mb}MB requerido)" "disk_low_$path"
+        fi
+    done
+}
+
+# Verifica DNS + proxy + TLS handshake con almc.es. Falla rápido si la red
+# no permitirá que el agente reporte bans (es lo que más rompe instalaciones
+# en entornos corporativos con proxy/firewall estricto).
+check_network_robust() {
+    # 1. DNS resolution de almc.es
+    local resolved=""
+    if command -v getent >/dev/null 2>&1; then
+        resolved=$(getent hosts almc.es 2>/dev/null | awk '{print $1}' | head -1)
+    fi
+    if [ -z "$resolved" ] && command -v nslookup >/dev/null 2>&1; then
+        resolved=$(nslookup almc.es 2>/dev/null | awk '/^Address: / {print $2; exit}')
+    fi
+    if [ -z "$resolved" ] && command -v host >/dev/null 2>&1; then
+        resolved=$(host almc.es 2>/dev/null | awk '/has address/ {print $4; exit}')
+    fi
+    if [ -z "$resolved" ]; then
+        warn "DNS no pudo resolver almc.es. El install continuará pero el agente fallará al reportar."
+        warn "Verifica /etc/resolv.conf, conectividad o servidores DNS internos."
+    else
+        info "DNS OK: almc.es → $resolved"
+    fi
+
+    # 2. Detectar proxy HTTP en el entorno (variables o /etc/environment)
+    local proxy="${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}"
+    if [ -z "$proxy" ] && [ -r /etc/environment ]; then
+        # IMPORTANTE: pipe sin || true → si grep no matchea (no hay proxy) sale 1
+        # y con `set -euo pipefail` el script aborta. El `|| true` evita eso.
+        proxy=$(grep -E "^(https?_proxy|HTTPS?_PROXY)=" /etc/environment 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || true)
+    fi
+    if [ -n "$proxy" ]; then
+        info "Proxy HTTP detectado: $proxy"
+        info "(curl + el agente Python lo usarán automáticamente via env vars)"
+        report_event "step" "proxy_detected" "Proxy detectado: $proxy"
+    fi
+
+    # 3. TLS handshake check (no exige API key, solo verifica que el TLS funciona)
+    # Pipefail OK aquí porque if/else captura el exit code del curl.
+    if curl -fsSL -o /dev/null --max-time 8 "https://almc.es/abuse-shield/install.sh" 2>/dev/null; then
+        info "TLS handshake con almc.es OK"
+    else
+        warn "TLS handshake con almc.es falló — el agente puede tener problemas reportando."
+        warn "Posibles causas: firewall outbound 443, MITM proxy sin CA confiada, IPv6-only sin route a almc.es"
+    fi
+}
 
 # Lee /etc/os-release y exporta variables OS_ID, OS_VERSION_ID, OS_PRETTY_NAME.
 # Fallback si no existe el archivo (algunos containers minimal).
@@ -196,6 +286,16 @@ check_selinux_context() {
         return 0
     fi
     info "SELinux Enforcing detectado — configurando contexto para almc-shield..."
+    # Auto-instalar policycoreutils-python-utils si falta semanage/restorecon
+    # (en RHEL minimal o Rocky 9 cloud no vienen por default)
+    if ! command -v semanage >/dev/null 2>&1 || ! command -v restorecon >/dev/null 2>&1; then
+        info "semanage/restorecon faltan — instalando policycoreutils-python-utils..."
+        case "$DISTRO" in
+            rhel) $PKG_INSTALL policycoreutils-python-utils >/dev/null 2>&1 \
+                  || $PKG_INSTALL policycoreutils-python >/dev/null 2>&1 \
+                  || true ;;
+        esac
+    fi
     # 1. Asegurar que F2B_LOG tiene el contexto var_log_t correcto
     if command -v semanage >/dev/null 2>&1 && command -v restorecon >/dev/null 2>&1; then
         F2B_LOG="${F2B_LOG:-/var/log/fail2ban.log}"
@@ -469,6 +569,17 @@ fi
 
 # ── Reportar inicio del install ──────────────────────────────────────────────
 report_event "start" "boot" "Install v${AGENT_VERSION} iniciado en $(hostname) [${OS_PRETTY_NAME}]"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Pre-flight: disk space + network robust (antes de cualquier modificación)
+# ═══════════════════════════════════════════════════════════════════════════
+CURRENT_STEP="preflight"
+step "Pre-flight — espacio en disco + DNS + proxy"
+if [ "$DRY_RUN" = "1" ]; then
+  info "(dry-run) check disk + network sí se ejecutan (read-only)"
+fi
+check_disk_space
+check_network_robust
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PASO 1: Detección de distro (apt/dnf/yum/apk/zypper)
@@ -826,7 +937,15 @@ if ! command -v fail2ban-client >/dev/null 2>&1; then
     $PKG_UPDATE >/dev/null 2>&1 || true
     case "$DISTRO" in
       debian)   $PKG_INSTALL fail2ban >/dev/null 2>&1 ;;
-      rhel)     $PKG_INSTALL fail2ban >/dev/null 2>&1 || $PKG_INSTALL epel-release >/dev/null 2>&1 && $PKG_INSTALL fail2ban >/dev/null 2>&1 ;;
+      rhel)
+        # En RHEL/Rocky/Alma 8+ fail2ban vive en EPEL. Instalamos EPEL primero
+        # de forma idempotente. dnf install epel-release es no-op si ya está.
+        if ! rpm -q epel-release >/dev/null 2>&1; then
+          info "Instalando EPEL (repo del que viene fail2ban en RHEL)..."
+          $PKG_INSTALL epel-release >/dev/null 2>&1 || warn "EPEL no se pudo instalar"
+        fi
+        $PKG_INSTALL fail2ban >/dev/null 2>&1
+        ;;
       suse)     $PKG_INSTALL fail2ban >/dev/null 2>&1 ;;
       alpine)   $PKG_INSTALL fail2ban >/dev/null 2>&1 ;;
     esac
@@ -909,20 +1028,38 @@ fi
 CURRENT_STEP="systemd_install"
 step "12/${TOTAL_STEPS} — systemd unit + sudoers + jail dedicado"
 
-# Detección de container LXC (sin CAP_SYS_ADMIN → mount namespacing falla)
+# Detección de container LXC/Docker (sin CAP_SYS_ADMIN → mount namespacing falla)
 VIRT_TYPE="unknown"
 if command -v systemd-detect-virt >/dev/null 2>&1; then
   VIRT_TYPE="$(systemd-detect-virt 2>/dev/null || echo unknown)"
 fi
-IS_LXC=0
+NEEDS_NS_DISABLE=0
 case "$VIRT_TYPE" in
-  lxc|lxc-libvirt) IS_LXC=1 ;;
+  lxc|lxc-libvirt)
+    # LXC unprivileged bloquea mount namespacing
+    NEEDS_NS_DISABLE=1
+    ;;
+  docker|podman)
+    # Docker/Podman containers tampoco soportan mount ns sin --privileged
+    NEEDS_NS_DISABLE=1
+    ;;
+  openvz|systemd-nspawn)
+    # OpenVZ y nspawn también limitan namespacing
+    NEEDS_NS_DISABLE=1
+    ;;
 esac
-# Fallback: si systemd-detect-virt no existe, mirar /proc/1/cgroup
-if [ "$IS_LXC" = "0" ] && [ -r /proc/1/cgroup ] && grep -qiE 'lxc|/lxc/' /proc/1/cgroup 2>/dev/null; then
-  IS_LXC=1
-  VIRT_TYPE="lxc"
+# Fallback: si systemd-detect-virt no existe, mirar /proc/1/cgroup y /.dockerenv
+if [ "$NEEDS_NS_DISABLE" = "0" ]; then
+  if [ -r /proc/1/cgroup ] && grep -qiE 'lxc|/lxc/' /proc/1/cgroup 2>/dev/null; then
+    NEEDS_NS_DISABLE=1; VIRT_TYPE="lxc"
+  elif [ -f /.dockerenv ]; then
+    NEEDS_NS_DISABLE=1; VIRT_TYPE="docker"
+  elif [ -r /proc/1/cgroup ] && grep -qE 'docker|/kubepods/' /proc/1/cgroup 2>/dev/null; then
+    NEEDS_NS_DISABLE=1; VIRT_TYPE="docker"
+  fi
 fi
+# Mantener compat con código que usa IS_LXC
+IS_LXC=$NEEDS_NS_DISABLE
 
 if [ "$DRY_RUN" = "1" ]; then
   info "(dry-run) virt detectado: ${VIRT_TYPE}${IS_LXC:+ → patch service sin mount namespacing}"
@@ -954,6 +1091,15 @@ else
 
   # sudoers
   if [ -d "/etc/sudoers.d" ]; then
+    # Verificar que /etc/sudoers carga /etc/sudoers.d/ (default en mayoría
+    # distros, pero algunas custom — alpine minimal, BeagleBoneBlack — no).
+    if ! grep -qE "^[[:space:]]*#?includedir[[:space:]]+/etc/sudoers\.d" /etc/sudoers 2>/dev/null \
+       && ! grep -qE "^[[:space:]]*@includedir[[:space:]]+/etc/sudoers\.d" /etc/sudoers 2>/dev/null; then
+      warn "/etc/sudoers NO incluye /etc/sudoers.d/ — nuestro sudoers/almc-shield no surtirá efecto"
+      warn "Añade manualmente esta línea al FINAL de /etc/sudoers:"
+      warn "  @includedir /etc/sudoers.d"
+      report_event "warn" "sudoers_includedir_missing" "/etc/sudoers no carga /etc/sudoers.d" "sudoers_no_include"
+    fi
     cp "$INSTALL_DIR/share/sudoers.d/almc-shield" /etc/sudoers.d/almc-shield
     chmod 440 /etc/sudoers.d/almc-shield
     if command -v visudo >/dev/null 2>&1; then
@@ -1025,6 +1171,7 @@ fi
 
 # ── Reportar success al final ────────────────────────────────────────────────
 [ "$DRY_RUN" != "1" ] && report_event "success" "install_complete" "Instalación completa OK"
+INSTALL_FINISHED_OK=1   # Marca para el trap EXIT: NO mostrar mensaje abort
 
 # ── Resumen final ────────────────────────────────────────────────────────────
 if [ "$DRY_RUN" = "1" ]; then

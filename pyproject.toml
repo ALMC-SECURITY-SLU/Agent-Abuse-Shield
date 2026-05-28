@@ -1,6 +1,6 @@
 [project]
 name = "almc-shield"
-version = "1.0.3"
+version = "1.0.4"
 description = "ALMC Abuse Shield agent — reports fail2ban bans to almc.es"
 authors = [{name = "ALMC Security S.L.U.", email = "info@almc.es"}]
 requires-python = ">=3.8"
