@@ -9,6 +9,9 @@ from almc_shield.state import State
 
 log = structlog.get_logger(__name__)
 
+MAX_PULL_PAGES_PER_CYCLE = 50  # tope anti-bucle del delta (~100K IPs/ciclo)
+MAX_FULL_PAGES = 100           # tope anti-bucle del full sync (~500K IPs)
+
 
 class Puller(threading.Thread):
     def __init__(self, cfg: Config, state: State, http_client, f2b: F2bClient):
@@ -111,40 +114,62 @@ class Puller(threading.Thread):
 
     def pull_once(self):
         cursor = self.state.get_cursor()
-        try:
-            r = self.client.get("/blocklist", params={
-                "since": cursor,
-                "include_global": "true" if self.include_global else "false",
-                "max": 10000,
-            })
-        except Exception as e:
-            log.warning("pull_request_failed", error=str(e))
-            return
-
-        if r.status_code != 200:
-            log.warning("pull_http_error", status=r.status_code, body=r.text[:200])
-            return
-
-        data = r.json()
-        items = data.get("items", [])
-        new_cursor = int(data.get("cursor", cursor))
-
+        global_cursor = self.state.get_global_cursor()
         added = removed = 0
-        for item in items:
-            ip = item.get("ip")
-            op = item.get("op")
-            if not ip:
-                continue
-            if op == "add":
-                if self.f2b.banip(ip):
-                    self.state.add_applied(ip, item.get("source", "tenant"))
-                    added += 1
-            elif op == "remove":
-                if self.f2b.unbanip(ip):
-                    self.state.remove_applied(ip)
-                    removed += 1
 
-        if new_cursor > cursor:
-            self.state.set_cursor(new_cursor)
-        if items:
-            log.info("pull_applied", added=added, removed=removed, cursor_from=cursor, cursor_to=new_cursor)
+        for _ in range(MAX_PULL_PAGES_PER_CYCLE):
+            try:
+                r = self.client.get("/blocklist", params={
+                    "since": cursor,
+                    "global_since": global_cursor,
+                    "include_global": "true" if self.include_global else "false",
+                    "max": 10000,
+                })
+            except Exception as e:
+                log.warning("pull_request_failed", error=str(e))
+                return
+
+            if r.status_code != 200:
+                log.warning("pull_http_error", status=r.status_code, body=r.text[:200])
+                return
+
+            data = r.json()
+            items = data.get("items", [])
+            new_cursor = int(data.get("cursor", cursor))
+            new_global_cursor = int(data.get("global_cursor", global_cursor))
+            tenant_more = data.get("next_cursor") is not None
+            global_advanced = new_global_cursor > global_cursor
+
+            for item in items:
+                ip = item.get("ip")
+                op = item.get("op")
+                if not ip:
+                    continue
+                if op == "add":
+                    if self.f2b.banip(ip):
+                        self.state.add_applied(ip, item.get("source", "tenant"))
+                        added += 1
+                elif op == "remove":
+                    if self.f2b.unbanip(ip):
+                        self.state.remove_applied(ip)
+                        removed += 1
+
+            # Persistir cada cursor tras cada lote: un fallo a mitad reanuda
+            # desde donde quedó en vez de re-aplicar todo.
+            if new_cursor > cursor:
+                cursor = new_cursor
+                self.state.set_cursor(cursor)
+            if new_global_cursor > global_cursor:
+                global_cursor = new_global_cursor
+                self.state.set_global_cursor(global_cursor)
+
+            # Drenado cuando el tenant no tiene más páginas y el global no avanzó.
+            if not tenant_more and not global_advanced:
+                break
+        else:
+            log.warning("pull_cap_reached", max_pages=MAX_PULL_PAGES_PER_CYCLE,
+                        cursor=cursor, global_cursor=global_cursor)
+
+        if added or removed:
+            log.info("pull_applied", added=added, removed=removed,
+                     cursor=cursor, global_cursor=global_cursor)
