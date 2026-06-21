@@ -34,6 +34,15 @@ class State:
         with self._lock, self._connect() as c:
             c.execute("INSERT OR REPLACE INTO kv (k, v) VALUES ('blocklist_cursor', ?)", (str(cursor),))
 
+    def get_global_cursor(self) -> int:
+        with self._lock, self._connect() as c:
+            row = c.execute("SELECT v FROM kv WHERE k='global_cursor'").fetchone()
+            return int(row[0]) if row else 0
+
+    def set_global_cursor(self, cursor: int) -> None:
+        with self._lock, self._connect() as c:
+            c.execute("INSERT OR REPLACE INTO kv (k, v) VALUES ('global_cursor', ?)", (str(cursor),))
+
     def get_pid_snapshot(self) -> int | None:
         with self._lock, self._connect() as c:
             row = c.execute("SELECT v FROM kv WHERE k='fail2ban_pid'").fetchone()

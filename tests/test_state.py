@@ -99,3 +99,34 @@ def test_persistence_across_instances(tmp_path: Path) -> None:
     assert s2.get_cursor() == 1000
     assert s2.get_pid_snapshot() == 4242
     assert s2.count_applied() == 2
+
+
+def test_initial_global_cursor_is_zero(tmp_path: Path) -> None:
+    s = State(str(tmp_path / "state.db"))
+    assert s.get_global_cursor() == 0
+
+
+def test_set_and_get_global_cursor(tmp_path: Path) -> None:
+    s = State(str(tmp_path / "state.db"))
+    s.set_global_cursor(2000)
+    assert s.get_global_cursor() == 2000
+    s.set_global_cursor(4000)
+    assert s.get_global_cursor() == 4000
+
+
+def test_global_cursor_persists_across_instances(tmp_path: Path) -> None:
+    db = str(tmp_path / "state.db")
+    s1 = State(db)
+    s1.set_global_cursor(28000)
+    s2 = State(db)
+    assert s2.get_global_cursor() == 28000
+
+
+def test_global_and_tenant_cursors_are_independent(tmp_path: Path) -> None:
+    s = State(str(tmp_path / "state.db"))
+    s.set_cursor(123)
+    s.set_global_cursor(456)
+    assert s.get_cursor() == 123
+    assert s.get_global_cursor() == 456
+    s.set_cursor(789)  # mover el del tenant no toca el global
+    assert s.get_global_cursor() == 456
