@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from almc_shield.puller import MAX_PULL_PAGES_PER_CYCLE, Puller
+from almc_shield.puller import MAX_FULL_PAGES, MAX_PULL_PAGES_PER_CYCLE, Puller
 from almc_shield.state import State
 
 
@@ -202,3 +202,54 @@ def test_pull_once_http_error_does_not_advance(tmp_path):
     make_puller(state, client).pull_once()  # must not raise
     assert state.get_cursor() == 11
     assert state.get_global_cursor() == 22
+
+
+class AlwaysMoreFullClient:
+    """Always returns a next_page (for the /blocklist/full cap test)."""
+
+    def __init__(self):
+        self.calls = []
+
+    def get(self, path, params=None, timeout=None):
+        params = params or {}
+        self.calls.append({"path": path, "params": params})
+        page = params.get("page", 1)
+        return FakeResponse(200, {"page": page, "next_page": page + 1, "items": []})
+
+
+# ---- _full_sync: page iteration --------------------------------------------
+
+def test_full_sync_iterates_all_pages(tmp_path):
+    state = State(str(tmp_path / "state.db"))
+    f2b = FakeF2b()
+    client = FakeHttpClient([
+        FakeResponse(200, {"page": 1, "next_page": 2,
+                           "items": [{"ip": "5.0.0.1", "source": "tenant"},
+                                     {"ip": "5.0.0.2", "source": "tenant"}]}),
+        FakeResponse(200, {"page": 2, "next_page": 3,
+                           "items": [{"ip": "5.0.0.3", "source": "tenant"},
+                                     {"ip": "5.0.0.4", "source": "tenant"}]}),
+        FakeResponse(200, {"page": 3, "next_page": None,
+                           "items": [{"ip": "5.0.0.5", "source": "global"}]}),
+    ])
+    make_puller(state, client, f2b)._full_sync()
+    assert len(f2b.banned) == 5
+    assert state.count_applied() == 5
+    assert [c["params"]["page"] for c in client.calls] == [1, 2, 3]
+
+
+def test_full_sync_single_page(tmp_path):
+    state = State(str(tmp_path / "state.db"))
+    client = FakeHttpClient([
+        FakeResponse(200, {"page": 1, "next_page": None,
+                           "items": [{"ip": "6.0.0.1", "source": "tenant"}]}),
+    ])
+    make_puller(state, client)._full_sync()
+    assert len(client.calls) == 1
+
+
+def test_full_sync_respects_safety_cap(tmp_path):
+    state = State(str(tmp_path / "state.db"))
+    client = AlwaysMoreFullClient()
+    make_puller(state, client)._full_sync()
+    assert len(client.calls) == MAX_FULL_PAGES

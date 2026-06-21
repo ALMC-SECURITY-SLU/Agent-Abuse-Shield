@@ -89,17 +89,22 @@ class Puller(threading.Thread):
                 self.state.set_pid_snapshot(pid)
 
     def _full_sync(self):
-        try:
-            r = self.client.get("/blocklist/full", params={
-                "include_global": "true" if self.include_global else "false",
-                "page": 1,
-            }, timeout=30.0)
+        page = 1
+        applied = 0
+        while page is not None and page <= MAX_FULL_PAGES:
+            try:
+                r = self.client.get("/blocklist/full", params={
+                    "include_global": "true" if self.include_global else "false",
+                    "page": page,
+                }, timeout=30.0)
+            except Exception as e:
+                log.warning("full_sync_failed", error=str(e), page=page)
+                return
             if r.status_code != 200:
-                log.warning("full_sync_http_error", status=r.status_code)
+                log.warning("full_sync_http_error", status=r.status_code, page=page)
                 return
             data = r.json()
             items = data.get("items", [])
-            applied = 0
             for item in items:
                 ip = item.get("ip")
                 if not ip:
@@ -107,10 +112,9 @@ class Puller(threading.Thread):
                 if self.f2b.banip(ip):
                     self.state.add_applied(ip, item.get("source", "tenant"))
                     applied += 1
-                time.sleep(0.2)  # Don't saturate fail2ban
-            log.info("full_sync_applied", count=applied)
-        except Exception as e:
-            log.warning("full_sync_failed", error=str(e))
+                time.sleep(0.2)  # Don't saturate el backend de bloqueo
+            page = data.get("next_page")
+        log.info("full_sync_applied", count=applied)
 
     def pull_once(self):
         cursor = self.state.get_cursor()
