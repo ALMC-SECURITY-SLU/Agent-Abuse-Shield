@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Paginación del feed global**: el agente solo aplicaba ~2.000 de las ~28.000
+  IPs del feed colectivo. `puller.pull_once` ahora envía `global_since` con un
+  cursor global separado (`state.global_cursor`) y drena el feed en bucle hasta
+  vaciarlo en un ciclo; `_full_sync` itera todas las páginas de `/blocklist/full`
+  en vez de pedir solo `page=1`. Backend sin cambios.
+
 ## [1.0.4] - 2026-05-28
 
 ### Added — installer hardening (6 detecciones extra)
