@@ -98,10 +98,10 @@ class Puller(threading.Thread):
                     "page": page,
                 }, timeout=30.0)
             except Exception as e:
-                log.warning("full_sync_failed", error=str(e), page=page)
+                log.warning("full_sync_failed", error=str(e), page=page, applied_so_far=applied)
                 return
             if r.status_code != 200:
-                log.warning("full_sync_http_error", status=r.status_code, page=page)
+                log.warning("full_sync_http_error", status=r.status_code, page=page, applied_so_far=applied)
                 return
             data = r.json()
             items = data.get("items", [])
@@ -112,7 +112,7 @@ class Puller(threading.Thread):
                 if self.f2b.banip(ip):
                     self.state.add_applied(ip, item.get("source", "tenant"))
                     applied += 1
-                time.sleep(0.2)  # Don't saturate el backend de bloqueo
+                time.sleep(0.2)  # Don't saturate fail2ban
             page = data.get("next_page")
         log.info("full_sync_applied", count=applied)
 

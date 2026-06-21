@@ -240,12 +240,15 @@ def test_full_sync_iterates_all_pages(tmp_path):
 
 def test_full_sync_single_page(tmp_path):
     state = State(str(tmp_path / "state.db"))
+    f2b = FakeF2b()
     client = FakeHttpClient([
         FakeResponse(200, {"page": 1, "next_page": None,
                            "items": [{"ip": "6.0.0.1", "source": "tenant"}]}),
     ])
-    make_puller(state, client)._full_sync()
+    make_puller(state, client, f2b)._full_sync()
     assert len(client.calls) == 1
+    assert f2b.banned == ["6.0.0.1"]
+    assert state.count_applied() == 1
 
 
 def test_full_sync_respects_safety_cap(tmp_path):
@@ -253,3 +256,16 @@ def test_full_sync_respects_safety_cap(tmp_path):
     client = AlwaysMoreFullClient()
     make_puller(state, client)._full_sync()
     assert len(client.calls) == MAX_FULL_PAGES
+
+
+def test_full_sync_http_error_mid_pagination_stops(tmp_path):
+    state = State(str(tmp_path / "state.db"))
+    f2b = FakeF2b()
+    client = FakeHttpClient([
+        FakeResponse(200, {"page": 1, "next_page": 2,
+                           "items": [{"ip": "7.0.0.1", "source": "tenant"}]}),
+        FakeResponse(500, {}, text="boom"),
+    ])
+    make_puller(state, client, f2b)._full_sync()  # must not raise
+    assert f2b.banned == ["7.0.0.1"]   # page 1 applied before the error
+    assert len(client.calls) == 2      # tried page 2, then stopped
