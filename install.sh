@@ -1,5 +1,5 @@
 #!/bin/bash
-# install.sh — Install ALMC Abuse Shield agent (v1.0.4).
+# install.sh — Install ALMC Abuse Shield agent (v1.0.5).
 #
 # Usage (running as root, e.g. inside an LXC container or after `su -`):
 #   ./install.sh --api-key=ab_live_XXXXX
@@ -70,7 +70,7 @@ LOG_DIR="/var/log/almc-shield"
 USER="almc-shield"
 GROUP="almc-shield"
 SERVICE_NAME="almc-shield"
-AGENT_VERSION="1.0.4"
+AGENT_VERSION="1.0.5"
 AGENT_TARBALL_URL="https://almc.es/abuse-shield-agent-${AGENT_VERSION}.tar.gz"
 AGENT_TARBALL_SHA_URL="https://almc.es/abuse-shield-agent-${AGENT_VERSION}.tar.gz.sha256"
 UNINSTALL_URL="https://almc.es/abuse-shield/uninstall.sh"
