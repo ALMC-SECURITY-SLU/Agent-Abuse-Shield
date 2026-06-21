@@ -174,13 +174,16 @@ def test_pull_once_handles_remove_op(tmp_path):
     assert state.count_applied() == 0
 
 
-def test_pull_once_include_global_disabled_terminates(tmp_path):
+def test_pull_once_include_global_false_sends_false_and_terminates(tmp_path):
     state = State(str(tmp_path / "state.db"))
     client = FakeHttpClient([
         FakeResponse(200, {"cursor": 0, "next_cursor": None, "global_cursor": 0,
-                           "include_global": False, "items": []}),
+                           "items": []}),
     ])
-    make_puller(state, client).pull_once()
+    p = make_puller(state, client)
+    p.include_global = False
+    p.pull_once()
+    assert client.calls[0]["params"]["include_global"] == "false"
     assert len(client.calls) == 1
 
 
