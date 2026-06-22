@@ -30,3 +30,6 @@ ENV/
 .mypy_cache/
 .coverage
 htmlcov/
+
+# Internal planning docs (specs/plans) — kept local, not published to the public repo
+docs/superpowers/
