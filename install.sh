@@ -559,7 +559,7 @@ if [ "$REINSTALL" = "1" ] && [ "$DRY_RUN" != "1" ]; then
     systemctl disable almc-shield 2>/dev/null || true
     rm -rf /opt/almc-shield /etc/almc-shield /var/lib/almc-shield /var/log/almc-shield
     rm -f /etc/systemd/system/almc-shield.service /etc/systemd/system/almc-shield-update.service /etc/systemd/system/almc-shield-update.timer
-    rm -f /etc/sudoers.d/almc-shield /usr/local/bin/almc-shield
+    rm -f /etc/sudoers.d/almc-shield /usr/local/bin/almc-shield /usr/local/bin/shield
     rm -f /etc/fail2ban/jail.d/almc-blocklist.conf /etc/fail2ban/filter.d/almc-blocklist.conf
     systemctl daemon-reload 2>/dev/null || true
     userdel almc-shield 2>/dev/null || deluser almc-shield 2>/dev/null || true
@@ -893,6 +893,15 @@ EOF
   chmod 755 "$INSTALL_DIR/bin/almc-shield"
   ln -sf "$INSTALL_DIR/bin/almc-shield" /usr/local/bin/almc-shield
   ok "Entrypoint /usr/local/bin/almc-shield instalado"
+
+  # Entrypoint `shield` — panel/visor del agente
+  cat > "$INSTALL_DIR/bin/shield" <<EOF
+#!/bin/bash
+exec "$INSTALL_DIR/venv/bin/python3" -m almc_shield.shield.cli "\$@"
+EOF
+  chmod 755 "$INSTALL_DIR/bin/shield"
+  ln -sf "$INSTALL_DIR/bin/shield" /usr/local/bin/shield
+  ok "Entrypoint /usr/local/bin/shield instalado"
 
   # Configurar venv para encontrar almc_shield
   PY_MINOR=$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')

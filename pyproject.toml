@@ -16,6 +16,7 @@ license = {text = "Proprietary"}
 [project.scripts]
 almc-shield = "almc_shield.__main__:main"
 almc-shield-cli = "almc_shield.cli:main"
+shield = "almc_shield.shield.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

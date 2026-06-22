@@ -12,7 +12,7 @@ systemctl daemon-reload 2>/dev/null || true
 
 echo "=== Removing files ==="
 rm -rf /opt/almc-shield /etc/almc-shield /var/lib/almc-shield /var/log/almc-shield
-rm -f /usr/local/bin/almc-shield /etc/sudoers.d/almc-shield
+rm -f /usr/local/bin/almc-shield /usr/local/bin/shield /etc/sudoers.d/almc-shield
 rm -f /etc/fail2ban/jail.d/almc-blocklist.conf /etc/fail2ban/filter.d/almc-blocklist.conf
 
 echo "=== Removing user ==="

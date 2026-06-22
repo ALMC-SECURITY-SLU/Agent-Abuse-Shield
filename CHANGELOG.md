@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Comando `shield`**: panel del agente en el servidor. `shield status` / `--once` /
+  `--json` / `--check` (exit 0/1/2 por salud). Sin abrir puertos. Sección `[shield]` en
+  config.ini (interval, rows, color, panels). (TUI interactiva y acciones: en curso.)
+- El agente escribe un snapshot de estado periódico (para `shield`) y persiste las
+  stats del feed; `puller` respeta `[puller] include_global` de la config.
+
+### Fixed
+- `sender.py` reportaba `agent_version` hardcodeado "1.0.0"; ahora usa la versión real
+  (causa de que el panel mostrara 1.0.0).
+
 ## [1.0.5] - 2026-06-22
 
 ### Fixed
