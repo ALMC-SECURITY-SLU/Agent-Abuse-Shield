@@ -48,8 +48,12 @@ def test_once_prints_human(cfg_file, capsys, monkeypatch):
 
 def test_cli_dispatches_disable(cfg_file, monkeypatch):
     calls = {}
-    monkeypatch.setattr(cli.actions, "disable",
-                        lambda cfg, assume_yes=False: calls.setdefault("yes", assume_yes) or 0)
+
+    def fake_disable(cfg, assume_yes=False):
+        calls["yes"] = assume_yes
+        return 0
+
+    monkeypatch.setattr(cli.actions, "disable", fake_disable)
     rc = cli.main(["disable", "--yes", "-c", cfg_file])
     assert rc == 0
     assert calls["yes"] is True
@@ -57,8 +61,12 @@ def test_cli_dispatches_disable(cfg_file, monkeypatch):
 
 def test_cli_dispatches_update(cfg_file, monkeypatch):
     calls = {}
-    monkeypatch.setattr(cli.actions, "update",
-                        lambda cfg, config_path, assume_yes=False: calls.setdefault("cp", config_path) or 0)
+
+    def fake_update(cfg, config_path, assume_yes=False):
+        calls["cp"] = config_path
+        return 0
+
+    monkeypatch.setattr(cli.actions, "update", fake_update)
     rc = cli.main(["update", "--yes", "-c", cfg_file])
     assert rc == 0
     assert calls["cp"] == cfg_file
@@ -80,4 +88,3 @@ def test_cli_dispatches_feed_global_off(cfg_file, monkeypatch):
 def test_cli_feed_global_requires_on_off(cfg_file):
     rc = cli.main(["feed-global", "-c", cfg_file])
     assert rc == 2
-    assert rc == 0
