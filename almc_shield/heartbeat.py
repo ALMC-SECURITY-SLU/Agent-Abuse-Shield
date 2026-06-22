@@ -23,6 +23,7 @@ class Heartbeat(threading.Thread):
         self._stop_event = threading.Event()
         self.degraded = False
         self.hostname = socket.gethostname()
+        self.last_ok_at = None
 
     def stop(self):
         self._stop_event.set()
@@ -60,6 +61,7 @@ class Heartbeat(threading.Thread):
         r = self.client.post("/heartbeat", json=payload, timeout=10.0)
         if 200 <= r.status_code < 300:
             self.degraded = False
+            self.last_ok_at = time.time()
         elif r.status_code in (401, 403):
             self.degraded = True
             log.warning("heartbeat_auth_issue", status=r.status_code)

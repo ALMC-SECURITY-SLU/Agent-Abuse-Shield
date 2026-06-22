@@ -24,6 +24,7 @@ class Puller(threading.Thread):
         # Tier del feed global: lo decide la config ([puller] include_global).
         # El backend además lo capa server-side por plan (PlanGate).
         self.include_global = cfg.puller.include_global
+        self.last_pull_at = None
 
     def stop(self):
         self._stop_event.set()
@@ -184,3 +185,5 @@ class Puller(threading.Thread):
         if added or removed:
             log.info("pull_applied", added=added, removed=removed,
                      cursor=cursor, global_cursor=global_cursor)
+
+        self.last_pull_at = time.time()

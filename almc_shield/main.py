@@ -37,6 +37,31 @@ def _default_state_path(outbox_db_path: str) -> str:
     return str(p)
 
 
+def build_status_snapshot(agent) -> dict:
+    """Construye el dict de estado que el agente persiste para que `shield` lo lea."""
+    threads = {
+        "reader": agent.reader.is_alive(),
+        "sender": True,  # sender corre en el bucle principal, no es hilo propio
+        "puller": agent.puller.is_alive(),
+        "heartbeat": agent.heartbeat.is_alive(),
+    }
+    if not all(threads.values()):
+        status = "critical"
+    elif agent.heartbeat.degraded:
+        status = "degraded"
+    else:
+        status = "healthy"
+    return {
+        "started_at": getattr(agent.heartbeat, "_start_time", None),
+        "hb_last_at": getattr(agent.heartbeat, "last_ok_at", None),
+        "hb_ok": not agent.heartbeat.degraded,
+        "status": status,
+        "threads": threads,
+        "last_pull_at": getattr(agent.puller, "last_pull_at", None),
+        "last_flush_at": getattr(agent, "_last_flush_at", None),
+    }
+
+
 class Agent:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -51,6 +76,7 @@ class Agent:
         self.heartbeat = Heartbeat(cfg, self.outbox, self.state, self.sender, self.http_client)
         self.heartbeat._start_time = time.time()
         self._stop_event = threading.Event()
+        self._last_flush_at = None
 
     def run(self) -> int:
         env = detect_environment()
@@ -76,10 +102,19 @@ class Agent:
                 if now - last_flush >= interval:
                     self.sender.flush_once()
                     last_flush = now
+                    self._last_flush_at = now
                 # TTL/size eviction once a minute
                 if int(now) % 60 == 0:
                     self.outbox.drop_oldest_if_over_quota()
                     self.outbox.drop_older_than(self.cfg.outbox.max_age_days * 86400)
+                # Status snapshot para `shield` (cada ~5s)
+                if int(now) % 5 == 0:
+                    try:
+                        snap = build_status_snapshot(self)
+                        snap["snapshot_at"] = now
+                        self.state.set_snapshot(snap)
+                    except Exception:
+                        pass
                 self._stop_event.wait(timeout=1.0)
         finally:
             log.info("agent_stopping_drain_outbox")
