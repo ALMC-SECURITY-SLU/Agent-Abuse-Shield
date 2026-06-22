@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-06-22
+
 ### Added
 - **Comando `shield`** (panel del agente en el servidor, sin abrir puertos):
   - `shield` → TUI interactiva en vivo (estilo htop); `shield status` / `--once` /
