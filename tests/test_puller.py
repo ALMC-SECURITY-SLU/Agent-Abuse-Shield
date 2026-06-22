@@ -76,7 +76,7 @@ class AlwaysMoreClient:
 
 
 def make_puller(state, client, f2b=None):
-    cfg = SimpleNamespace(puller=SimpleNamespace(interval_seconds=300))
+    cfg = SimpleNamespace(puller=SimpleNamespace(interval_seconds=300, include_global=True))
     return Puller(cfg, state, client, f2b or FakeF2b())
 
 
@@ -269,3 +269,21 @@ def test_full_sync_http_error_mid_pagination_stops(tmp_path):
     make_puller(state, client, f2b)._full_sync()  # must not raise
     assert f2b.banned == ["7.0.0.1"]   # page 1 applied before the error
     assert len(client.calls) == 2      # tried page 2, then stopped
+
+
+def test_puller_respects_config_include_global_false(tmp_path):
+    state = State(str(tmp_path / "state.db"))
+    cfg = SimpleNamespace(puller=SimpleNamespace(interval_seconds=300, include_global=False))
+    p = Puller(cfg, state, FakeHttpClient([]), FakeF2b())
+    assert p.include_global is False
+
+
+def test_pull_once_persists_feed_stats(tmp_path):
+    state = State(str(tmp_path / "state.db"))
+    cfg = SimpleNamespace(puller=SimpleNamespace(interval_seconds=300, include_global=True))
+    client = FakeHttpClient([
+        FakeResponse(200, {"cursor": 0, "next_cursor": None, "global_cursor": 0,
+                           "items": [], "stats": {"tenant_active": 142, "global_active": 28000}}),
+    ])
+    Puller(cfg, state, client, FakeF2b()).pull_once()
+    assert state.get_feed_stats() == {"tenant_active": 142, "global_active": 28000}

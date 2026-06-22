@@ -21,8 +21,9 @@ class Puller(threading.Thread):
         self.client = http_client
         self.f2b = f2b
         self._stop_event = threading.Event()
-        # Tier from heartbeat response (placeholder True for now; F11 will gate it via tenant settings)
-        self.include_global = True
+        # Tier del feed global: lo decide la config ([puller] include_global).
+        # El backend además lo capa server-side por plan (PlanGate).
+        self.include_global = cfg.puller.include_global
 
     def stop(self):
         self._stop_event.set()
@@ -138,6 +139,12 @@ class Puller(threading.Thread):
                 return
 
             data = r.json()
+            stats = data.get("stats")
+            if isinstance(stats, dict):
+                self.state.set_feed_stats(
+                    int(stats.get("tenant_active", 0)),
+                    int(stats.get("global_active", 0)),
+                )
             items = data.get("items", [])
             new_cursor = int(data.get("cursor", cursor))
             new_global_cursor = int(data.get("global_cursor", global_cursor))
