@@ -69,6 +69,11 @@ def main(argv=None) -> int:
 
     # default y `status [--once]`
     # (Plan A: siempre one-shot; el modo interactivo TUI llega en Plan B)
+    # Salida robusta en terminales/locales no-UTF8 (evita crash al pintar glifos).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     from rich.console import Console
     color_system = None if (args.no_color or cfg.shield.color == "never") else "auto"
     Console(color_system=color_system).print(render_snapshot(snap, rows=rows, source=args.source))
