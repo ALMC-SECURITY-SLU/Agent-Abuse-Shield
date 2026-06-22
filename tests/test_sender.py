@@ -144,3 +144,14 @@ def test_idempotency_key_is_deterministic_from_outbox_ids(outbox, cfg) -> None:
 
     # Both retries must use the SAME key (deterministic from row IDs)
     assert key_1 == key_2, f"Idempotency-Key must be deterministic, got {key_1} != {key_2}"
+
+
+def test_report_payload_uses_real_version():
+    import inspect
+
+    from almc_shield import sender as sender_mod
+    from almc_shield.version import __version__
+    src = inspect.getsource(sender_mod)
+    assert '"agent_version": "1.0.0"' not in src, "sender.py no debe hardcodear la version"
+    assert "__version__" in src, "sender.py debe usar __version__ para agent_version"
+    assert sender_mod.__version__ == __version__

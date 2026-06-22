@@ -15,6 +15,7 @@ import structlog
 from almc_shield.circuit_breaker import CircuitBreaker
 from almc_shield.config import Config
 from almc_shield.outbox import Outbox
+from almc_shield.version import __version__
 
 log = structlog.get_logger(__name__)
 
@@ -64,7 +65,7 @@ class Sender:
         )
 
         payload = {
-            "agent_version": "1.0.0",
+            "agent_version": __version__,
             "hostname": self.hostname,
             "bans": bans,
         }
