@@ -1,4 +1,4 @@
-"""CLI `shield`: visor del agente (status/--once/--json/--check)."""
+"""CLI `shield`: visor + acciones de control del agente."""
 from __future__ import annotations
 
 import argparse
@@ -10,10 +10,13 @@ from pathlib import Path
 from almc_shield.config import load as load_config
 from almc_shield.f2b_client import F2bClient
 from almc_shield.outbox import Outbox
+from almc_shield.shield import actions
 from almc_shield.shield.health import exit_code_for
 from almc_shield.shield.render import render_snapshot
 from almc_shield.shield.snapshot import gather
 from almc_shield.state import State
+
+_ACTIONS = ("update", "disable", "enable", "feed-global", "uninstall")
 
 
 def _state_path(cfg) -> str:
@@ -25,11 +28,13 @@ def _build_f2b(cfg):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    # Parser plano (un positional `cmd` + flags) para que las opciones funcionen
+    # Parser plano (positional `cmd` + flags) para que las opciones funcionen
     # en cualquier orden: `shield status --check -c X` y `shield -c X status`.
-    p = argparse.ArgumentParser(prog="shield", description="Panel del agente ALMC Abuse Shield")
-    p.add_argument("cmd", nargs="?", default="status", choices=["status"],
-                   help="comando (Plan A: solo 'status')")
+    p = argparse.ArgumentParser(prog="shield", description="Panel y control del agente ALMC Abuse Shield")
+    p.add_argument("cmd", nargs="?", default=None,
+                   choices=["status", *_ACTIONS],
+                   help="status (default) | " + " | ".join(_ACTIONS))
+    p.add_argument("arg", nargs="?", default=None, help="on|off (para feed-global)")
     p.add_argument("-c", "--config", default="/etc/almc-shield/config.ini")
     p.add_argument("-n", "--interval", type=int, default=None, help="refresco TUI (seg)")
     p.add_argument("--no-color", action="store_true")
@@ -38,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--once", action="store_true")
     p.add_argument("--json", action="store_true")
     p.add_argument("--check", action="store_true")
+    p.add_argument("-y", "--yes", action="store_true", help="no pedir confirmación")
     return p
 
 
@@ -45,6 +51,26 @@ def _gather(cfg):
     state = State(_state_path(cfg))
     outbox = Outbox(cfg.outbox.db_path, cfg.outbox.max_size_mb, cfg.outbox.max_age_days)
     return gather(cfg, state, outbox, _build_f2b(cfg))
+
+
+def _dispatch_action(cmd, args, cfg) -> int:
+    if cmd == "update":
+        return actions.update(cfg, args.config, assume_yes=args.yes)
+    if cmd == "disable":
+        return actions.disable(cfg, assume_yes=args.yes)
+    if cmd == "enable":
+        return actions.enable(cfg)
+    if cmd == "uninstall":
+        return actions.uninstall(cfg, assume_yes=args.yes)
+    if cmd == "feed-global":
+        if args.arg not in ("on", "off"):
+            print("Uso: shield feed-global on|off", file=sys.stderr)
+            return 2
+        return actions.feed_global(
+            cfg, args.config, turn_on=(args.arg == "on"),
+            state=State(_state_path(cfg)), f2b=_build_f2b(cfg), assume_yes=args.yes,
+        )
+    return 2  # no alcanzable
 
 
 def main(argv=None) -> int:
@@ -55,20 +81,21 @@ def main(argv=None) -> int:
         print(f"FATAL: no se pudo cargar config {args.config}: {e}", file=sys.stderr)
         return 2
 
+    # Acciones de control
+    if args.cmd in _ACTIONS:
+        return _dispatch_action(args.cmd, args, cfg)
+
+    # Vista de estado (cmd None o "status")
     snap = _gather(cfg)
     rows = args.rows if args.rows is not None else cfg.shield.rows
 
-    # --check : sin UI, solo exit code (0/1/2)
     if args.check:
         return exit_code_for(snap.status)
 
-    # --json : salida máquina
     if args.json:
         print(json.dumps(dataclasses.asdict(snap), default=str))
         return 0
 
-    # default y `status [--once]`
-    # (Plan A: siempre one-shot; el modo interactivo TUI llega en Plan B)
     # Salida robusta en terminales/locales no-UTF8 (evita crash al pintar glifos).
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

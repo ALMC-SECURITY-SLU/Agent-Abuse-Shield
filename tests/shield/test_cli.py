@@ -44,3 +44,40 @@ def test_once_prints_human(cfg_file, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "ALMC Shield" in out
     assert rc == 0
+
+
+def test_cli_dispatches_disable(cfg_file, monkeypatch):
+    calls = {}
+    monkeypatch.setattr(cli.actions, "disable",
+                        lambda cfg, assume_yes=False: calls.setdefault("yes", assume_yes) or 0)
+    rc = cli.main(["disable", "--yes", "-c", cfg_file])
+    assert rc == 0
+    assert calls["yes"] is True
+
+
+def test_cli_dispatches_update(cfg_file, monkeypatch):
+    calls = {}
+    monkeypatch.setattr(cli.actions, "update",
+                        lambda cfg, config_path, assume_yes=False: calls.setdefault("cp", config_path) or 0)
+    rc = cli.main(["update", "--yes", "-c", cfg_file])
+    assert rc == 0
+    assert calls["cp"] == cfg_file
+
+
+def test_cli_dispatches_feed_global_off(cfg_file, monkeypatch):
+    calls = {}
+
+    def fake_feed(cfg, config_path, turn_on=None, state=None, f2b=None, assume_yes=False):
+        calls["turn_on"] = turn_on
+        return 0
+
+    monkeypatch.setattr(cli.actions, "feed_global", fake_feed)
+    rc = cli.main(["feed-global", "off", "-c", cfg_file])
+    assert rc == 0
+    assert calls["turn_on"] is False
+
+
+def test_cli_feed_global_requires_on_off(cfg_file):
+    rc = cli.main(["feed-global", "-c", cfg_file])
+    assert rc == 2
+    assert rc == 0
