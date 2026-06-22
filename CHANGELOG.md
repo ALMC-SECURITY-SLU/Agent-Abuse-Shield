@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Comando `shield`**: panel del agente en el servidor. `shield status` / `--once` /
-  `--json` / `--check` (exit 0/1/2 por salud). Sin abrir puertos. Sección `[shield]` en
-  config.ini (interval, rows, color, panels). (TUI interactiva y acciones: en curso.)
+- **Comando `shield`** (panel del agente en el servidor, sin abrir puertos):
+  - `shield` → TUI interactiva en vivo (estilo htop); `shield status` / `--once` /
+    `--json` / `--check` (exit 0/1/2 por salud, para monitorización).
+  - Acciones: `shield update`, `disable`/`enable`, `feed-global off`/`on`,
+    `uninstall` — requieren root, piden confirmación (salvo `--yes`) y reportan al
+    backend best-effort. `feed-global off` desbloquea las IPs del feed global con aviso.
+  - Sección `[shield]` en config.ini (interval, rows, color, panels).
 - El agente escribe un snapshot de estado periódico (para `shield`) y persiste las
   stats del feed; `puller` respeta `[puller] include_global` de la config.
 
