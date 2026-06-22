@@ -130,3 +130,45 @@ def test_global_and_tenant_cursors_are_independent(tmp_path: Path) -> None:
     assert s.get_global_cursor() == 456
     s.set_cursor(789)  # mover el del tenant no toca el global
     assert s.get_global_cursor() == 456
+
+
+def test_snapshot_roundtrip(tmp_path: Path) -> None:
+    s = State(str(tmp_path / "state.db"))
+    assert s.get_snapshot() is None
+    s.set_snapshot({"status": "healthy", "uptime": 42})
+    assert s.get_snapshot() == {"status": "healthy", "uptime": 42}
+
+
+def test_snapshot_corrupt_returns_none(tmp_path: Path) -> None:
+    s = State(str(tmp_path / "state.db"))
+    with s._connect() as c:  # write invalid JSON directly
+        c.execute("INSERT OR REPLACE INTO kv (k, v) VALUES ('status_snapshot', ?)", ("{not json",))
+    assert s.get_snapshot() is None
+
+
+def test_count_and_list_by_source(tmp_path: Path) -> None:
+    s = State(str(tmp_path / "state.db"))
+    s.add_applied("1.1.1.1", "tenant")
+    s.add_applied("2.2.2.2", "global")
+    s.add_applied("3.3.3.3", "global")
+    assert s.count_by_source("global") == 2
+    assert s.count_by_source("tenant") == 1
+    assert sorted(s.applied_by_source("global")) == ["2.2.2.2", "3.3.3.3"]
+
+
+def test_feed_stats_roundtrip(tmp_path: Path) -> None:
+    s = State(str(tmp_path / "state.db"))
+    assert s.get_feed_stats() is None
+    s.set_feed_stats(tenant_active=142, global_active=28000)
+    assert s.get_feed_stats() == {"tenant_active": 142, "global_active": 28000}
+
+
+def test_recent_applied_newest_first(tmp_path: Path) -> None:
+    s = State(str(tmp_path / "state.db"))
+    with s._connect() as c:
+        c.execute("INSERT INTO applied_ips (ip, applied_at, source) VALUES ('a', 100, 'tenant')")
+        c.execute("INSERT INTO applied_ips (ip, applied_at, source) VALUES ('b', 200, 'global')")
+        c.execute("INSERT INTO applied_ips (ip, applied_at, source) VALUES ('c', 150, 'tenant')")
+    rows = s.recent_applied(limit=2)
+    assert [r[0] for r in rows] == ["b", "c"]  # newest applied_at first
+    assert rows[0] == ("b", 200, "global")
