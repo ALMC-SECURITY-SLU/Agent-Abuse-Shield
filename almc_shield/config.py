@@ -82,6 +82,14 @@ class RuntimeConfig:
 
 
 @dataclass
+class ShieldConfig:
+    interval_seconds: int = 2
+    rows: int = 10
+    color: str = "auto"     # auto | always | never
+    panels: str = "feed,queue,threads,bans"
+
+
+@dataclass
 class Config:
     api: ApiConfig
     outbox: OutboxConfig = field(default_factory=OutboxConfig)
@@ -91,6 +99,7 @@ class Config:
     fail2ban: Fail2banConfig = field(default_factory=Fail2banConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    shield: ShieldConfig = field(default_factory=ShieldConfig)
 
 
 def _get(cp: configparser.ConfigParser, section: str, key: str, default=None, cast=str):
@@ -190,7 +199,14 @@ def load(path: str) -> Config:
         log_destination=_get(cp, "runtime", "log_destination", RuntimeConfig.log_destination),
     )
 
+    shield = ShieldConfig(
+        interval_seconds=_get(cp, "shield", "interval_seconds", ShieldConfig.interval_seconds, int),
+        rows=_get(cp, "shield", "rows", ShieldConfig.rows, int),
+        color=_get(cp, "shield", "color", ShieldConfig.color),
+        panels=_get(cp, "shield", "panels", ShieldConfig.panels),
+    )
+
     return Config(
         api=api, outbox=outbox, sender=sender, heartbeat=heartbeat, puller=puller,
-        fail2ban=fail2ban, logging=logging, runtime=runtime,
+        fail2ban=fail2ban, logging=logging, runtime=runtime, shield=shield,
     )

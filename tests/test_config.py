@@ -61,3 +61,28 @@ url = https://almc.es/api/v1/abuse
 def test_raises_when_file_missing() -> None:
     with pytest.raises(FileNotFoundError):
         config.load("/nonexistent/config.ini")
+
+
+def test_shield_defaults(tmp_path):
+    p = tmp_path / "c.ini"
+    p.write_text("[api]\nurl = https://almc.es/api/v1/abuse\napi_key = ab_live_x\n")
+    from almc_shield.config import load
+    cfg = load(str(p))
+    assert cfg.shield.interval_seconds == 2
+    assert cfg.shield.rows == 10
+    assert cfg.shield.color == "auto"
+    assert cfg.shield.panels == "feed,queue,threads,bans"
+
+
+def test_shield_overrides(tmp_path):
+    p = tmp_path / "c.ini"
+    p.write_text(
+        "[api]\nurl = https://almc.es/api/v1/abuse\napi_key = ab_live_x\n"
+        "[shield]\ninterval_seconds = 5\nrows = 20\ncolor = never\npanels = feed,bans\n"
+    )
+    from almc_shield.config import load
+    cfg = load(str(p))
+    assert cfg.shield.interval_seconds == 5
+    assert cfg.shield.rows == 20
+    assert cfg.shield.color == "never"
+    assert cfg.shield.panels == "feed,bans"
