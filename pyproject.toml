@@ -8,6 +8,7 @@ dependencies = [
     "httpx>=0.28.0,<0.29",
     "watchdog>=6.0.0,<7",
     "structlog>=25.0.0,<26",
+    "rich>=13,<14",
 ]
 readme = "README.md"
 license = {text = "Proprietary"}
