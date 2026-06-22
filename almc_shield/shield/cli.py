@@ -85,9 +85,21 @@ def main(argv=None) -> int:
     if args.cmd in _ACTIONS:
         return _dispatch_action(args.cmd, args, cfg)
 
-    # Vista de estado (cmd None o "status")
-    snap = _gather(cfg)
     rows = args.rows if args.rows is not None else cfg.shield.rows
+
+    # TUI interactiva: `shield` a secas en una terminal (no para status/--json/--check)
+    from almc_shield.shield import tui
+    if tui._should_use_tui(args.cmd, sys.stdout.isatty()) and not args.json and not args.check:
+        interval = args.interval if args.interval is not None else cfg.shield.interval_seconds
+        chosen = tui.run_tui(lambda: _gather(cfg), cfg.puller.include_global,
+                             interval=interval, rows=rows, source=args.source)
+        if chosen:
+            args.arg = chosen[1]
+            return _dispatch_action(chosen[0], args, cfg)
+        return 0
+
+    # Vista de estado one-shot (status / --json / --check / sin TTY)
+    snap = _gather(cfg)
 
     if args.check:
         return exit_code_for(snap.status)
